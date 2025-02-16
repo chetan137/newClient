@@ -1,0 +1,65 @@
+import React, { createContext, useState, useContext, useEffect } from "react";
+import axios from "axios";
+
+// Define User Interface
+interface User {
+  _id: string;
+  email: string;
+  username?: string;
+  googleId?: string;
+}
+
+interface AuthContextType {
+  auth: boolean;
+  user: User | null;
+  setAuth: (auth: boolean, user?: User | null) => void;
+}
+
+const AuthContext = createContext<AuthContextType | undefined>(undefined);
+
+export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
+  children,
+}) => {
+  const [auth, setAuthState] = useState<boolean>(false);
+  const [user, setUser] = useState<User | null>(null);
+
+  // Fetch authentication status from the backend
+useEffect(() => {
+  const checkAuth = async () => {
+    try {
+      console.log("🔍 Checking authentication status...");
+      const response = await axios.get("http://localhost:5000/api/check-auth", {
+        withCredentials: true, // ✅ Ensures session cookie is sent
+      });
+
+      console.log("✅ Auth response:", response.data);
+      setAuth(response.data.isAuthenticated, response.data.user);
+    } catch (error) {
+      console.error("❌ Error checking auth:", error);
+      setAuth(false, null);
+    }
+  };
+  checkAuth();
+}, []);// ✅ Empty dependency array ensures it only runs on mount
+
+  // Update authentication state
+  const setAuth = (auth: boolean, user?: User | null) => {
+    setAuthState(auth);
+    setUser(user || null);
+  };
+
+  return (
+    <AuthContext.Provider value={{ auth, user, setAuth }}>
+      {children}
+    </AuthContext.Provider>
+  );
+};
+
+// ✅ Ensure useAuth() is only used inside AuthProvider
+export const useAuth = () => {
+  const context = useContext(AuthContext);
+  if (!context) {
+    throw new Error("useAuth must be used within an AuthProvider");
+  }
+  return context;
+};
