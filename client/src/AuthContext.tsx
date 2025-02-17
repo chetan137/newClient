@@ -23,26 +23,39 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
   const [auth, setAuthState] = useState<boolean>(false);
   const [user, setUser] = useState<User | null>(null);
 
-  // Fetch authentication status from the backend
-useEffect(() => {
-  const checkAuth = async () => {
-    try {
-      console.log("🔍 Checking authentication status...");
-      const response = await axios.get("http://localhost:5000/api/check-auth", {
-        withCredentials: true, // ✅ Ensures session cookie is sent
-      });
+  // ✅ Fetch authentication status
+  useEffect(() => {
+    const checkAuth = async () => {
+      try {
+        console.log("🔍 Checking authentication status...");
+        const response = await axios.get(
+          "http://localhost:5000/api/check-auth",
+          {
+            withCredentials: true, // ✅ Ensures session cookie is sent
+          }
+        );
 
-      console.log("✅ Auth response:", response.data);
-      setAuth(response.data.isAuthenticated, response.data.user);
-    } catch (error) {
-      console.error("❌ Error checking auth:", error);
-      setAuth(false, null);
-    }
-  };
-  checkAuth();
-}, []);// ✅ Empty dependency array ensures it only runs on mount
+        console.log("✅ Auth response:", response.data);
+        setAuthState(response.data.isAuthenticated);
+        setUser(response.data.user);
+      } catch (error: any) {
+        console.error("❌ Error checking auth:", error);
 
-  // Update authentication state
+        // 🔹 Log Backend Response
+        if (error.response) {
+          console.error("Backend response data:", error.response.data);
+          console.error("Backend response status:", error.response.status);
+        }
+
+        setAuthState(false);
+        setUser(null);
+      }
+    };
+
+    checkAuth();
+  }, []);
+
+  // ✅ Update authentication state
   const setAuth = (auth: boolean, user?: User | null) => {
     setAuthState(auth);
     setUser(user || null);

@@ -69,9 +69,15 @@ app.use(async (req, res, next) => {
 });
 
 // **✅ Authentication Check Route**
-app.get('/api/check-auth',  (req, res) => {
-  console.log("User:", req.user);
-  res.json({ isAuthenticated: true, user: req.user });
+app.get('/api/check-auth',    (req, res) => {
+  console.log("🔄 Sending authentication status to frontend...");
+ if (!req.user) {
+    return res.status(401).json({ isAuthenticated: false, message: 'User not authenticated' });
+  }
+  res.json({
+    isAuthenticated: true,
+    user: req.user
+  });
 });
 
 // **✅ Fix Logout Handling**
