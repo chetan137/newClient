@@ -6,6 +6,7 @@ const cors = require('cors');
 const MongoStore = require('connect-mongo');
 const authRoutes = require('./routes/auth');
 const userRoutes = require('./routes/user');
+const otpRoutes = require('./routes/otpRoutes');
 require('dotenv').config();
 const User = require('./models/User');
 
@@ -98,6 +99,8 @@ app.post('/api/auth/logout', async (req, res) => {
 // Routes
 app.use('/api/auth', authRoutes);
 app.use('/api/user', isAuthenticated, userRoutes);
+
+app.use('/api/otp', otpRoutes);
 
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => console.log(`Server running on port ${PORT}`));

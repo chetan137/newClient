@@ -6,8 +6,8 @@ const crypto = require('crypto');
 const mailer = require('../utils/mailer');
 const bcrypt = require('bcryptjs');
 const authMiddleware = require("../middleware/authMiddleware.js");
-const { OAuth2Client } = require('google-auth-library');
-const client = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
+
+
   require('dotenv').config();
 const nodemailer = require('nodemailer');
 
@@ -20,16 +20,38 @@ const nodemailer = require('nodemailer');
 });
 // Email/Password Signup
 router.post('/signup', async (req, res) => {
-  const { username, email, password } = req.body;
+  const { email, mobileNumber, password, confirmPassword } = req.body;
+console.log("this is ",req.body)
   try {
-    const user = new User({ username, email, password });
-    console.log("kkk",user);
+    // Validate passwords match
+    if (password !== confirmPassword) {
+      return res.status(400).json({ error: 'Passwords do not match' });
+    }
+
+    // Check if email already exists
+    const existingEmail = await User.findOne({ email });
+    if (existingEmail) {
+      return res.status(400).json({ error: 'Email already registered' });
+    }
+
+    // Create user (mobile verification will happen separately)
+    const user = new User({
+      email,
+      mobileNumber,
+      password,
+      isMobileVerified: false // Initially false until OTP verification
+    });
+
     await user.save();
-    res.status(201).json({ message: 'User created successfully' });
+    res.status(201).json({
+      message: 'User created successfully. Please verify mobile number.',
+      userId: user._id
+    });
   } catch (err) {
     res.status(400).json({ error: err.message });
   }
 });
+
 router.post('/login', passport.authenticate('local'), async (req, res) => {
   try {
     await User.findByIdAndUpdate(req.user._id, { currentSessionId: req.sessionID });
@@ -121,87 +143,150 @@ router.post('/reset-password/:token', async (req, res) => {
   }
 });
 
-router.get('/google', passport.authenticate('google', { scope: ['profile', 'email'] }));
 
- // Google OAuth Callback Route (Handles Response from Google)
- router.get(
-  '/google/callback',
-  passport.authenticate('google', { failureRedirect: 'http://localhost:5173/login' }),
-  async (req, res) => {
+
+const MSG91_AUTH_KEY = process.env.MSG91_AUTH_KEY;
+const MSG91_OTP_TEMPLATE_ID = process.env.MSG91_OTP_TEMPLATE_ID;
+const MSG91_SENDER_ID = process.env.MSG91_SENDER_ID;
+
+// Send OTP
+router.post('/send-otp', async (req, res) => {
     try {
-      console.log("Google OAuth success! User:", req.user);
+        const { mobileNumber } = req.body;
 
-      // ✅ Ensure session is saved after authentication
-      req.session.save((err) => {
-        if (err) {
-          console.error("Session save error:", err);
-          return res.redirect('http://localhost:5173/login?error=session_save_failed');
+        if (!mobileNumber) {
+            return res.status(400).json({ success: false, message: 'Mobile number is required' });
         }
 
-        // ✅ Redirect to the dashboard after successful login
-        res.redirect('http://localhost:5173/dashboard');
-      });
+        const response = await axios.get('https://api.msg91.com/api/v5/otp', {
+            params: {
+                authkey: MSG91_AUTH_KEY,
+                mobile: mobileNumber,
+                template_id: MSG91_OTP_TEMPLATE_ID,
+                sender: MSG91_SENDER_ID,
+                otp_expiry: 5 // OTP expiry in minutes
+            }
+        });
+
+        res.json({
+            success: true,
+            message: 'OTP sent successfully',
+            data: response.data
+        });
     } catch (error) {
-      console.error('Error during Google OAuth callback:', error);
-      res.redirect('http://localhost:5173/login?error=google_oauth_failed');
+        console.error('Error sending OTP:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to send OTP',
+            error: error.response?.data || error.message
+        });
     }
-  }
-);
+});
 
-// ✅ POST Route for Google OAuth (Token-based authentication)
-router.post('/google', async (req, res) => {
-  const { token } = req.body;
+// Verify OTP
+router.post('/verify-otp', async (req, res) => {
+    try {
+        const { mobileNumber, otp } = req.body;
 
-  try {
-    if (!token) {
-      return res.status(400).json({ error: "Missing Google ID token" });
-    }
-
-    // ✅ Verify the Google token
-    const ticket = await client.verifyIdToken({
-      idToken: token,
-      audience: process.env.GOOGLE_CLIENT_ID,
-    });
-
-    const payload = ticket.getPayload();
-    if (!payload) {
-      return res.status(400).json({ error: "Invalid Google token" });
-    }
-
-    // ✅ Find or Create User in the Database
-    let user = await User.findOne({ googleId: payload.sub });
-
-    if (!user) {
-      user = new User({
-        googleId: payload.sub,
-        email: payload.email,
-        username: payload.name,
-      });
-      await user.save();
-    }
-
-    // ✅ Log the user in using Passport
-    req.login(user, (err) => {
-      if (err) {
-        console.error("Login error:", err);
-        return res.status(500).json({ error: "Login failed" });
-      }
-
-      // ✅ Save the session
-      req.session.save((err) => {
-        if (err) {
-          console.error("Session save error:", err);
-          return res.status(500).json({ error: "Session save failed" });
+        if (!mobileNumber || !otp) {
+            return res.status(400).json({
+                success: false,
+                message: 'Mobile number and OTP are required'
+            });
         }
 
-        console.log("Google login successful. User:", user);
-        return res.status(200).json({ message: 'Google login successful', user });
-      });
-    });
-  } catch (err) {
-    console.error('Error during Google OAuth:', err);
-    res.status(400).json({ error: err.message });
-  }
+        const response = await axios.get('https://api.msg91.com/api/v5/otp/verify', {
+            params: {
+                authkey: MSG91_AUTH_KEY,
+                mobile: mobileNumber,
+                otp: otp
+            }
+        });
+
+        if (response.data.type === 'success') {
+            const user = await User.findOneAndUpdate(
+                { mobileNumber },
+                { isMobileVerified: true, mobileVerifiedAt: new Date() },
+                { new: true }
+            );
+
+            return res.json({
+                success: true,
+                message: 'OTP verified successfully',
+                user: user
+            });
+        } else {
+            return res.status(400).json({
+                success: false,
+                message: 'Invalid OTP'
+            });
+        }
+    } catch (error) {
+        console.error('Error verifying OTP:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to verify OTP',
+            error: error.response?.data || error.message
+        });
+    }
 });
+
+// Resend OTP
+router.post('/resend-otp', async (req, res) => {
+    try {
+        const { mobileNumber, retryType } = req.body; // retryType can be 'text' or 'voice'
+
+        if (!mobileNumber) {
+            return res.status(400).json({
+                success: false,
+                message: 'Mobile number is required'
+            });
+        }
+
+        const response = await axios.get('https://api.msg91.com/api/v5/otp/retry', {
+            params: {
+                authkey: MSG91_AUTH_KEY,
+                mobile: mobileNumber,
+                retrytype: retryType || 'text'
+            }
+        });
+
+        res.json({
+            success: true,
+            message: 'OTP resent successfully',
+            data: response.data
+        });
+    } catch (error) {
+        console.error('Error resending OTP:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to resend OTP',
+            error: error.response?.data || error.message
+        });
+    }
+});
+
+router.get('/otp-analytics', async (req, res) => {
+    try {
+        const response = await axios.get('https://api.msg91.com/api/v5/otp/report', {
+            params: {
+                authkey: MSG91_AUTH_KEY
+            }
+        });
+
+        res.json({
+            success: true,
+            data: response.data
+        });
+    } catch (error) {
+        console.error('Error fetching OTP analytics:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to fetch OTP analytics',
+            error: error.response?.data || error.message
+        });
+    }
+});
+
 
 module.exports = router;

@@ -3,11 +3,27 @@ const bcrypt = require('bcryptjs');
 const crypto = require('crypto');
 
 const userSchema = new mongoose.Schema({
-  username: { type: String, required: true },
   email: { type: String, required: true, unique: true },
+  mobileNumber: {
+    type: String,
+    unique: true,
+    sparse: true,
+    trim: true,
+    validate: {
+      validator: function(v) {
+        return /^[0-9]{10}$/.test(v);
+      },
+      message: props => `${props.value} is not a valid mobile number!`
+    }
+  },
+
+   isMobileVerified: {
+    type: Boolean,
+    default: false
+  },
+
   password: { type: String },
-  googleId: { type: String },
-  role: { type: String, enum: ['user', 'admin'], default: 'user' },
+  role: { type: String, enum: ['user', 'admin','subadmin'], default: 'user' },
   resetPasswordToken: { type: String },
   resetPasswordExpires: { type: Date },
     currentSessionId: { type: String },

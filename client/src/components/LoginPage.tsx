@@ -3,7 +3,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { Form, Input, Button, Typography, message } from "antd";
 import { MailOutlined, LockOutlined } from "@ant-design/icons";
 import axios from "axios";
-import { GoogleLogin } from "@react-oauth/google";
+// import { GoogleLogin } from "@react-oauth/google";
 import { useAuth } from "../AuthContext";
 
 const { Title } = Typography;
@@ -42,30 +42,30 @@ const LoginPage: React.FC = () => {
   };
 
   // Handle Google login
-  const handleGoogleSuccess = async (credentialResponse: any) => {
-    setLoading(true); // Enable loading state
-    try {
-      const response = await axios.post(
-        "http://localhost:5000/api/auth/google",
-        {
-          token: credentialResponse.credential,
-        },
-        { withCredentials: true } // Include credentials (cookies)
-      );
-       setAuth(true);
-      console.log("Google login response:", response);
-      message.success("Google login successful");
-      navigate("/dashboard"); // Redirect to dashboard after successful login
-    } catch (error: any) {
-      console.error("Google login error:", error);
-      message.error(
-        error.response?.data?.message ||
-          "Google login failed. Please try again."
-      );
-    } finally {
-      setLoading(false); // Disable loading state
-    }
-  };
+  // const handleGoogleSuccess = async (credentialResponse: any) => {
+  //   setLoading(true); // Enable loading state
+  //   try {
+  //     const response = await axios.post(
+  //       "http://localhost:5000/api/auth/google",
+  //       {
+  //         token: credentialResponse.credential,
+  //       },
+  //       { withCredentials: true } // Include credentials (cookies)
+  //     );
+  //      setAuth(true);
+  //     console.log("Google login response:", response);
+  //     message.success("Google login successful");
+  //     navigate("/dashboard"); // Redirect to dashboard after successful login
+  //   } catch (error: any) {
+  //     console.error("Google login error:", error);
+  //     message.error(
+  //       error.response?.data?.message ||
+  //         "Google login failed. Please try again."
+  //     );
+  //   } finally {
+  //     setLoading(false); // Disable loading state
+  //   }
+  // };
 
   return (
     <div style={{ maxWidth: 400, margin: "auto", padding: 50 }}>
@@ -104,14 +104,14 @@ const LoginPage: React.FC = () => {
         </Form.Item>
 
         {/* Google Login Button */}
-        <Form.Item>
+        {/* <Form.Item>
           <GoogleLogin
             onSuccess={handleGoogleSuccess}
             onError={() => {
               message.error("Google login failed. Please try again.");
             }}
           />
-        </Form.Item>
+        </Form.Item> */}
 
         {/* Forgot Password Link */}
         <Form.Item>
